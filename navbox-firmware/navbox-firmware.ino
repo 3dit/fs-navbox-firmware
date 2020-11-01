@@ -1,6 +1,7 @@
 #include <avr/io.h>
 #include <avr/pgmspace.h>
 #include <avr/interrupt.h>
+#include <Encoder.h>
 
 // Configure the number of buttons.  Be careful not
 // to use a pin for both a digital button and analog
@@ -33,13 +34,11 @@ byte stepsB = 0;
 byte stepsC = 0;
 byte stepsD = 0;
 byte stepsE = 0;
-int  cwA = 0;
-int  cwB = 0;
-int  cwC = 0;
-int  cwD = 0;
+int cwA = 0;
+int cwB = 0;
+int cwC = 0;
+int cwD = 0;
 int cwE = 0;
-volatile byte VA1State = 0;
-volatile byte VA2State = 0;
 volatile byte VB1State = 0;
 volatile byte VB2State = 0;
 volatile byte VC1State = 0;
@@ -96,7 +95,16 @@ int DLeftFalseCount = -1;
 int ERightFalseCount = -1;
 int ELeftFalseCount = -1;
 
-const int globalRotateDelay = 80;
+const int del = 5;
+int seq = del;
+
+
+//experiment with nav knob A high resolution + big change mode
+volatile byte VA1State = 0;
+volatile byte VA2State = 0;
+volatile int click_cnt = 0;
+volatile bool VA_has_changed = false;
+const int globalRotateDelay = 60;
 int ARotateResetDelay = 15;
 int BRotateResetDelay = globalRotateDelay;
 int CRotateResetDelay = 20;
@@ -106,6 +114,16 @@ unsigned long ALastTickTime = 0;
 const int AMinimumMsForExtendedMove = 50;
 int AExtendedMoveMs = 300;
 
+//encoder library test
+bool AOnState = false;
+long AChangeCount = 0;
+Encoder knobLeft(A1Input, A2Input);
+
+long encoderAPosition = knobLeft.read();
+long lastEncoderAPosition = encoderAPosition;
+bool encoderDifferential = false;
+long lastAChangeCount = AChangeCount;
+
 void setup() {
   Serial.begin(9600);
   // configure the joystick to manual send mode.  This gives precise
@@ -113,7 +131,10 @@ void setup() {
   // require you to manually call Joystick.send_now().
   Joystick.useManualSend(true);
   for (int i = 0; i < numButtons; i++) {
-    pinMode(i, INPUT_PULLUP);
+    if (i != A1Input && i != A2Input)
+    {
+      pinMode(i, INPUT_PULLUP);
+    }
   }
 
   //ISR(PCINT0_vect)
@@ -127,8 +148,8 @@ void setup() {
   //}
 
   //rotary encoder A
-  pinMode(A1Input, INPUT_PULLUP);
-  pinMode(A2Input, INPUT_PULLUP);
+  //pinMode(A1Input, INPUT_PULLUP);
+  //pinMode(A2Input, INPUT_PULLUP);
   //rotary encoder B
   pinMode(B1Input, INPUT_PULLUP);
   pinMode(B2Input, INPUT_PULLUP);
@@ -146,27 +167,55 @@ void setup() {
   //attachInterrupt(digitalPinToInterrupt(A1Input), doChangeA1, RISING);
   //attachInterrupt(digitalPinToInterrupt(A2Input), doChangeA2, RISING);
 
-  Serial.println("Begin Complete Joystick Test");
 }
 
 void doChangeA1()
 {
   VA1State = digitalRead(A1Input);
+  VA_has_changed = true;
 }
 
 void doChangeA2()
 {
   VA2State = digitalRead(A2Input) << 1;
+  VA_has_changed = true;
 }
 
 
-byte allButtons[numButtons];
+byte allLogicalButtons[numButtons];
 byte prevButtons[numButtons];
 int angle = 0;
 
 void loop() {
 
-  encoderA();
+  encoderA_I();
+  //encoderA();
+
+
+
+if(false)
+{
+  seq--;
+  if (seq > 0)
+  {
+    if (allLogicalButtons[ARotateRightButton] == 1)
+    {
+      Joystick.button(ARotateRightButton + 1, 1);
+      Joystick.send_now();
+    }
+    if (allLogicalButtons[ARotateLeftButton] == 1)
+    {
+      Joystick.button(ARotateLeftButton + 1, 1);
+      Joystick.send_now();
+    }
+    return;
+  } else {
+    seq = del;
+  }
+}
+
+
+
   encoderB();
   encoderC();
   encoderD();
@@ -186,26 +235,26 @@ void loop() {
 
     //if(i != ARotateRightButton && i != ARotateLeftButton) {
     //  if (digitalRead(i)) {
-    //    allButtons[i] = 0;
+    //    allLogicalButtons[i] = 0;
     //  } else {
-    //    allButtons[i] = 1;//low is button on (pullup resistor is applied)
+    //    allLogicalButtons[i] = 1;//low is button on (pullup resistor is applied)
     //  }
 
     if (digitalRead(i)) {
-      allButtons[i] = 0;
+      allLogicalButtons[i] = 0;
     } else {
-      allButtons[i] = 1;
+      allLogicalButtons[i] = 1;
     }
 
     if (i != ledPin) {
-      Joystick.button(i + 1, allButtons[i]);
+      Joystick.button(i + 1, allLogicalButtons[i]);
     }
   }
 
   for (int i = 0; i < numEncoders * 2; i++)
   {
     if (i != ledPin) {
-      Joystick.button(i + 1, allButtons[i]);
+      Joystick.button(i + 1, allLogicalButtons[i]);
     }
   }
 
@@ -214,28 +263,22 @@ void loop() {
   //{
   //  if(digitalRead(i))
   //  {
-  //    allButtons[i] = 0;
+  //    allLogicalButtons[i] = 0;
   //  } else {
-  //    allButtons[i] = 1;
+  //    allLogicalButtons[i] = 1;
   //  }
-  //  Joystick.button(i + 1, allButtons[i]);
+  //  Joystick.button(i + 1, allLogicalButtons[i]);
   //}
 
-
-
-
-
-
-
-  //Joystick.button(i, allButtons[i]);
+  //Joystick.button(i, allLogicalButtons[i]);
 
 
   Joystick.send_now();
 
   boolean anyChange = false;
   for (int i = 0; i < numButtons; i++) {
-    if (allButtons[i] != prevButtons[i]) anyChange = true;
-    prevButtons[i] = allButtons[i];
+    if (allLogicalButtons[i] != prevButtons[i]) anyChange = true;
+    prevButtons[i] = allLogicalButtons[i];
   }
 
   if (ADialMoveRight || ADialMoveLeft)
@@ -246,13 +289,89 @@ void loop() {
   //if (anyChange) {
   //  Serial.print("Buttons: ");
   //  for (int i=0; i<numButtons; i++) {
-  //    Serial.print(allButtons[i], DEC);
+  //    Serial.print(allLogicalButtons[i], DEC);
   //  }
   //  Serial.println();
   //}
 
-  delay(1);
+  delay(3);
 }
+
+void encoderA_I() {
+
+  encoderAPosition = knobLeft.read();
+
+  if (encoderAPosition != lastEncoderAPosition)
+  {
+    long delta = encoderAPosition - lastEncoderAPosition;
+    if(delta<-3) delta = -3;
+    if(delta>3) delta = 3;
+    if(delta<0 && AChangeCount > 0)
+    {
+      AChangeCount = 0;
+    }
+    else if(delta > 0 && AChangeCount < 0)
+    {
+      AChangeCount = 0;
+    }
+    AChangeCount += delta;
+    lastEncoderAPosition = encoderAPosition;
+
+    encoderDifferential = true;
+  }
+
+  
+  if (AChangeCount != 0)
+  {
+    if (AChangeCount > 0) /* rotating right */
+    {
+      if (AOnState == false)
+      {
+        allLogicalButtons[ARotateRightButton] = 1;
+        allLogicalButtons[ARotateLeftButton] = 0;
+      }
+      else
+      {
+        allLogicalButtons[ARotateRightButton] = 0;
+        allLogicalButtons[ARotateLeftButton] = 0;
+        AChangeCount--;
+      }
+    }
+    else /* rotating left */
+    {
+      if (AOnState == false)
+      {
+        allLogicalButtons[ARotateRightButton] = 0;
+        allLogicalButtons[ARotateLeftButton] = 1;
+      }
+      else
+      {
+        allLogicalButtons[ARotateRightButton] = 0;
+        allLogicalButtons[ARotateLeftButton] = 0;
+        AChangeCount++;
+      }
+    }
+    AOnState = !AOnState;
+  }
+  else
+  {
+    if (AOnState == true)
+    {
+      allLogicalButtons[ARotateRightButton] = 0;
+      allLogicalButtons[ARotateLeftButton] = 0;
+    }
+    AOnState = false;
+    knobLeft.write(0);
+  }
+
+  if (lastAChangeCount != AChangeCount)
+  {
+    Serial.print(AChangeCount);
+    Serial.println();
+    lastAChangeCount = AChangeCount;
+  }
+}
+
 
 void encoderA() {
   // read the input pin:
@@ -358,7 +477,7 @@ void encoderA() {
 
   if (ADialMoveRight == true)
   {
-    allButtons[ARotateRightButton] = 1;
+    allLogicalButtons[ARotateRightButton] = 1;
     ADialMoveRight = false;
     ADialMoveLeft = false;
     ARightFalseCount = currentRotateResetDelay;
@@ -367,12 +486,12 @@ void encoderA() {
       ARightFalseCount--;
     }
     if (ARightFalseCount <= 0) {
-      allButtons[ARotateRightButton] = 0;
+      allLogicalButtons[ARotateRightButton] = 0;
     }
   }
   if (ADialMoveLeft == true)
   {
-    allButtons[ARotateLeftButton] = 1;
+    allLogicalButtons[ARotateLeftButton] = 1;
     ADialMoveLeft = false;
     ADialMoveRight = false;
     ALeftFalseCount = currentRotateResetDelay;
@@ -381,7 +500,7 @@ void encoderA() {
       ALeftFalseCount--;
     }
     if (ALeftFalseCount <= 0) {
-      allButtons[ARotateLeftButton] = 0;
+      allLogicalButtons[ARotateLeftButton] = 0;
     }
   }
 
@@ -464,7 +583,7 @@ void encoderB() {
 
   if (BDialMoveRight == true)
   {
-    allButtons[BRotateRightButton] = 1;
+    allLogicalButtons[BRotateRightButton] = 1;
     BDialMoveRight = false;
     BDialMoveLeft = false;
     BRightFalseCount = BRotateResetDelay;
@@ -473,12 +592,12 @@ void encoderB() {
       BRightFalseCount--;
     }
     if (BRightFalseCount <= 0) {
-      allButtons[BRotateRightButton] = 0;
+      allLogicalButtons[BRotateRightButton] = 0;
     }
   }
   if (BDialMoveLeft == true)
   {
-    allButtons[BRotateLeftButton] = 1;
+    allLogicalButtons[BRotateLeftButton] = 1;
     BDialMoveLeft = false;
     BDialMoveRight = false;
     BLeftFalseCount = BRotateResetDelay;
@@ -487,7 +606,7 @@ void encoderB() {
       BLeftFalseCount--;
     }
     if (BLeftFalseCount <= 0) {
-      allButtons[BRotateLeftButton] = 0;
+      allLogicalButtons[BRotateLeftButton] = 0;
     }
   }
 }
@@ -569,7 +688,7 @@ void encoderC() {
 
   if (CDialMoveRight == true)
   {
-    allButtons[CRotateRightButton] = 1;
+    allLogicalButtons[CRotateRightButton] = 1;
     CDialMoveRight = false;
     CDialMoveLeft = false;
     CRightFalseCount = CRotateResetDelay;
@@ -578,12 +697,12 @@ void encoderC() {
       CRightFalseCount--;
     }
     if (CRightFalseCount <= 0) {
-      allButtons[CRotateRightButton] = 0;
+      allLogicalButtons[CRotateRightButton] = 0;
     }
   }
   if (CDialMoveLeft == true)
   {
-    allButtons[CRotateLeftButton] = 1;
+    allLogicalButtons[CRotateLeftButton] = 1;
     CDialMoveLeft = false;
     CDialMoveRight = false;
     CLeftFalseCount = CRotateResetDelay;
@@ -592,7 +711,7 @@ void encoderC() {
       CLeftFalseCount--;
     }
     if (CLeftFalseCount <= 0) {
-      allButtons[CRotateLeftButton] = 0;
+      allLogicalButtons[CRotateLeftButton] = 0;
     }
   }
 }
@@ -674,7 +793,7 @@ void encoderD() {
 
   if (DDialMoveRight == true)
   {
-    allButtons[DRotateRightButton] = 1;
+    allLogicalButtons[DRotateRightButton] = 1;
     DDialMoveRight = false;
     DDialMoveLeft = false;
     DRightFalseCount = DRotateResetDelay;
@@ -683,12 +802,12 @@ void encoderD() {
       DRightFalseCount--;
     }
     if (DRightFalseCount <= 0) {
-      allButtons[DRotateRightButton] = 0;
+      allLogicalButtons[DRotateRightButton] = 0;
     }
   }
   if (DDialMoveLeft == true)
   {
-    allButtons[DRotateLeftButton] = 1;
+    allLogicalButtons[DRotateLeftButton] = 1;
     DDialMoveLeft = false;
     DDialMoveRight = false;
     DLeftFalseCount = DRotateResetDelay;
@@ -697,7 +816,7 @@ void encoderD() {
       DLeftFalseCount--;
     }
     if (DLeftFalseCount <= 0) {
-      allButtons[DRotateLeftButton] = 0;
+      allLogicalButtons[DRotateLeftButton] = 0;
     }
   }
 }
@@ -779,7 +898,7 @@ void encoderE() {
 
   if (EDialMoveRight == true)
   {
-    allButtons[ERotateRightButton] = 1;
+    allLogicalButtons[ERotateRightButton] = 1;
     EDialMoveRight = false;
     EDialMoveLeft = false;
     ERightFalseCount = ERotateResetDelay;
@@ -788,12 +907,12 @@ void encoderE() {
       ERightFalseCount--;
     }
     if (ERightFalseCount <= 0) {
-      allButtons[ERotateRightButton] = 0;
+      allLogicalButtons[ERotateRightButton] = 0;
     }
   }
   if (EDialMoveLeft == true)
   {
-    allButtons[ERotateLeftButton] = 1;
+    allLogicalButtons[ERotateLeftButton] = 1;
     EDialMoveLeft = false;
     EDialMoveRight = false;
     ELeftFalseCount = ERotateResetDelay;
@@ -802,7 +921,7 @@ void encoderE() {
       ELeftFalseCount--;
     }
     if (ELeftFalseCount <= 0) {
-      allButtons[ERotateLeftButton] = 0;
+      allLogicalButtons[ERotateLeftButton] = 0;
     }
   }
 }
