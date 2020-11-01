@@ -106,6 +106,18 @@ unsigned long ALastTickTime = 0;
 const int AMinimumMsForExtendedMove = 50;
 int AExtendedMoveMs = 300;
 
+#define ENC_A 0
+#define ENC_B 1
+#define ENC_PORT PIND
+uint8_t bitShift = 2; // change to suit your pins (offset from 0,1 per port)
+// Note: You need to choose pins that have Interrupt capability.
+
+//NEW
+int counter;
+boolean ticToc;
+int lastCounter;
+
+
 void setup() {
   Serial.begin(9600);
   // configure the joystick to manual send mode.  This gives precise
@@ -127,8 +139,8 @@ void setup() {
   //}
 
   //rotary encoder A
-  pinMode(A1Input, INPUT_PULLUP);
-  pinMode(A2Input, INPUT_PULLUP);
+  //pinMode(A1Input, INPUT_PULLUP);
+  //pinMode(A2Input, INPUT_PULLUP);
   //rotary encoder B
   pinMode(B1Input, INPUT_PULLUP);
   pinMode(B2Input, INPUT_PULLUP);
@@ -143,10 +155,77 @@ void setup() {
   pinMode(E2Input, INPUT_PULLUP);
 
 
+//NEW
+  pinMode(ENC_A, INPUT);
+  digitalWrite(ENC_A, HIGH);
+  pinMode(ENC_B, INPUT);
+  digitalWrite(ENC_B, HIGH);
+  counter = 0;
+  ticToc = false;
+  // Attach ISR to both interrupts
+  attachInterrupt(0, read_encoder, RISING);
+  attachInterrupt(1, read_encoder, RISING);
+lastCounter = counter;
+
+
   //attachInterrupt(digitalPinToInterrupt(A1Input), doChangeA1, RISING);
   //attachInterrupt(digitalPinToInterrupt(A2Input), doChangeA2, RISING);
 
-  Serial.println("Begin Complete Joystick Test");
+  //Serial.println("Begin Complete Joystick Test");
+}
+
+int flash = 0;
+digitalWrite(13,0);
+
+void read_encoder()
+{
+  int8_t enc_states[] = {0, -1, 1, 0, 1, 0, 0, -1, -1, 0, 0, 1, 0, 1, -1, 0};
+  static uint8_t encoderState = 0;
+  static uint8_t stateIndex = 0;
+  static uint8_t filteredPort = 0;
+  uint8_t filter = 0x03; // base filter: 0b00000011
+  filter <<= bitShift;
+
+  //Serial.print("raw port value: ");
+  //Serial.println(ENC_PORT, BIN);
+
+  //Serial.print("filter bitmask: ");
+  //Serial.println(filter, BIN);
+
+  filteredPort = ENC_PORT & filter;
+  //Serial.print("filtered port state: ");
+  //Serial.println(filteredPort, BIN);
+
+  //Serial.print("old encoder state: ");
+  //Serial.println(encoderState, BIN);
+
+  encoderState &= filter; // filter out everything except the rotary encoder pins
+  //Serial.print("filtered old encoder state: ");
+  //Serial.println(encoderState, BIN);
+
+  encoderState <<= 2; // shift existing value two bits to the left
+  //Serial.print("filtered and shifted (<<2) old encoder state: ");
+  //Serial.println(encoderState, BIN);
+
+  encoderState |= filteredPort; // add filteredport value
+  //Serial.print("old encoder state + port state: ");
+  //Serial.println(encoderState, BIN);
+
+  stateIndex = encoderState >> bitShift;
+  //Serial.print("encoder state index: ");
+  //Serial.println(stateIndex, DEC);
+
+  if (ticToc) {
+    //Serial.print("counter tic: ");
+    //Serial.println(enc_states[stateIndex], DEC);
+    counter += enc_states[stateIndex];
+    
+    //Serial.print("counter: ");
+    //Serial.println(counter, DEC);
+  }
+  ticToc = !ticToc;
+
+  //Serial.println("----------");
 }
 
 void doChangeA1()
@@ -166,7 +245,8 @@ int angle = 0;
 
 void loop() {
 
-  encoderA();
+  encoderA_I();
+  
   encoderB();
   encoderC();
   encoderD();
@@ -204,27 +284,10 @@ void loop() {
 
   for (int i = 0; i < numEncoders * 2; i++)
   {
-    if (i != ledPin) {
+    if (i != ledPin && i != ARotateRightButton && i != ARotateLeftButton) {
       Joystick.button(i + 1, allButtons[i]);
     }
   }
-
-  //map encoder values through
-  //for(int i = 0;i<numEncoders*2;i++)
-  //{
-  //  if(digitalRead(i))
-  //  {
-  //    allButtons[i] = 0;
-  //  } else {
-  //    allButtons[i] = 1;
-  //  }
-  //  Joystick.button(i + 1, allButtons[i]);
-  //}
-
-
-
-
-
 
 
   //Joystick.button(i, allButtons[i]);
@@ -232,34 +295,32 @@ void loop() {
 
   Joystick.send_now();
 
-  boolean anyChange = false;
-  for (int i = 0; i < numButtons; i++) {
-    if (allButtons[i] != prevButtons[i]) anyChange = true;
-    prevButtons[i] = allButtons[i];
-  }
-
-  if (ADialMoveRight || ADialMoveLeft)
-  {
-    anyChange = true;
-  }
-
-  //if (anyChange) {
-  //  Serial.print("Buttons: ");
-  //  for (int i=0; i<numButtons; i++) {
-  //    Serial.print(allButtons[i], DEC);
-  //  }
-  //  Serial.println();
+  //boolean anyChange = false;
+  //for (int i = 0; i < numButtons; i++) {
+  //  if (allButtons[i] != prevButtons[i]) anyChange = true;
+  //  prevButtons[i] = allButtons[i];
   //}
 
-  delay(1);
+  delay(10);
+}
+
+void encoderA_I() {
+  int counterNow = counter;
+  if(counterNow > lastCounter)
+  {
+    int delta = counterNow - lastCounter;
+    for(int i=0;i<delta;i++)
+    {
+      Joystick.button(ARotateRightButton + 1, 1);
+      Joystick.send_now();
+      Joystick.button(ARotateRightButton + 1, 0);
+      Joystick.send_now();
+    }
+  }
+  lastCounter = counter;
 }
 
 void encoderA() {
-  // read the input pin:
-  cli();
-  //A1State = VA1State; //digitalRead(A1Input);
-  //A2State = VA2State; //digitalRead(A2Input) << 1;
-  sei();
   A1State = digitalRead(A1Input);
   A2State = digitalRead(A2Input) << 1;
 
