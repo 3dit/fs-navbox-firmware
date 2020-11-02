@@ -106,6 +106,55 @@ unsigned long ALastTickTime = 0;
 const int AMinimumMsForExtendedMove = 50;
 int AExtendedMoveMs = 300;
 
+
+
+//New
+enum PinAssignments {
+  encoderPinA = 0,   // right
+  encoderPinB = 1,   // left
+  clearButton = 8    // another two pins
+};
+volatile unsigned int encoderPos = 0;  // a counter for the dial
+unsigned int lastReportedPos = 1;   // change management
+static boolean rotating = false;    // debounce management
+// interrupt service routine vars
+boolean A_set = false;
+boolean B_set = false;
+void doEncoderA() {
+  // debounce
+  if ( rotating ) delay (1);  // wait a little until the bouncing is done
+
+  // Test transition, did things really change?
+  if ( digitalRead(encoderPinA) != A_set ) { // debounce once more
+    A_set = !A_set;
+
+    // adjust counter + if A leads B
+    if ( A_set && !B_set )
+      encoderPos += 1;
+
+    rotating = false;  // no more debouncing until loop() hits again
+  }
+}
+
+// Interrupt on B changing state, same as A above
+void doEncoderB() {
+  if ( rotating ) delay (1);
+  if ( digitalRead(encoderPinB) != B_set ) {
+    B_set = !B_set;
+    //  adjust counter - 1 if B leads A
+    if ( B_set && !A_set )
+      encoderPos -= 1;
+
+    rotating = false;
+  }
+}
+
+
+
+
+
+
+
 void setup() {
   Serial.begin(9600);
   // configure the joystick to manual send mode.  This gives precise
@@ -146,6 +195,17 @@ void setup() {
   //attachInterrupt(digitalPinToInterrupt(A1Input), doChangeA1, RISING);
   //attachInterrupt(digitalPinToInterrupt(A2Input), doChangeA2, RISING);
 
+
+
+//NEW
+
+// Interrupt on A changing state
+  //encoder pin on interrupt 0 (pin 2)
+  attachInterrupt(digitalPinToInterrupt(A1Input), doEncoderA, RISING);
+  // encoder pin on interrupt 1 (pin 3)
+  attachInterrupt(digitalPinToInterrupt(A2Input), doEncoderB, RISING);
+
+
   Serial.println("Begin Complete Joystick Test");
 }
 
@@ -166,7 +226,9 @@ int angle = 0;
 
 void loop() {
 
-  encoderA();
+  //encoderA();
+  encoder_AI();
+  
   encoderB();
   encoderC();
   encoderD();
@@ -237,12 +299,7 @@ void loop() {
     if (allButtons[i] != prevButtons[i]) anyChange = true;
     prevButtons[i] = allButtons[i];
   }
-
-  if (ADialMoveRight || ADialMoveLeft)
-  {
-    anyChange = true;
-  }
-
+ 
   //if (anyChange) {
   //  Serial.print("Buttons: ");
   //  for (int i=0; i<numButtons; i++) {
@@ -253,6 +310,74 @@ void loop() {
 
   delay(1);
 }
+
+
+//NEW
+bool ARightNeedsOn = false;
+bool ALeftNeedsOn = false;
+void encoder_AI()
+{
+  rotating = true;  // reset the debouncer
+
+  if(ARightNeedsOn)
+  {
+    allButtons[ARotateRightButton] = 1;
+    allButtons[ARotateLeftButton] = 0;
+    ARightNeedsOn = false;
+    return;//catch you next time
+  }
+
+  if(ALeftNeedsOn)
+  {
+    allButtons[ARotateLeftButton] = 1;
+    allButtons[ARotateRightButton] = 0;
+    ALeftNeedsOn = false;
+    return;//catch you next time    
+  }
+  
+  
+  if (lastReportedPos != encoderPos) {
+    //Serial.print("Index:");
+    //Serial.println(encoderPos, DEC);
+
+    if(lastReportedPos > encoderPos)
+    {
+      //right
+      if(allButtons[ARotateRightButton] == 1)
+      {
+        allButtons[ARotateRightButton] = 0;
+        ARightNeedsOn = true;
+      } else {
+        allButtons[ARotateRightButton] = 1;
+      }
+      allButtons[ARotateLeftButton] = 0;
+    } else if(lastReportedPos < encoderPos) {
+      //left
+      if(allButtons[ARotateLeftButton] == 1)
+      {
+        allButtons[ARotateLeftButton] = 0;
+        ALeftNeedsOn = true;
+      } else {
+        allButtons[ARotateLeftButton] = 1;
+      }
+      allButtons[ARotateRightButton] = 0;
+    } else {
+      //no change
+      allButtons[ARotateLeftButton] = 0;
+      allButtons[ARotateRightButton] = 0;
+    }
+    
+    lastReportedPos = encoderPos;
+  }
+  //if (digitalRead(clearButton) == LOW )  {
+  //  encoderPos = 0;
+  //}
+}
+
+
+
+
+
 
 void encoderA() {
   // read the input pin:
