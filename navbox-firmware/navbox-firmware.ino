@@ -6,7 +6,7 @@
 // to use a pin for both a digital button and analog
 // axis.  The pullup resistor will interfere with
 // the analog voltage.
-const int numButtons = 24;  // 16 for Teensy, 32 for Teensy++
+const int numButtons = 28;  // 16 for Teensy, 32 for Teensy++
 const int numEncoders = 5;
 const int buttonInputStart = 10; //11th pin (pin 10)
 const int pushButtonCount = numButtons - buttonInputStart;
@@ -145,8 +145,20 @@ void setup() {
 
   //attachInterrupt(digitalPinToInterrupt(A1Input), doChangeA1, RISING);
   //attachInterrupt(digitalPinToInterrupt(A2Input), doChangeA2, RISING);
+  //attachInterrupt(digitalPinToInterrupt(A1Input), doChangeA1R, RISING);
+  //attachInterrupt(digitalPinToInterrupt(A1Input), doChangeA1F, FALLING);
 
   Serial.println("Begin Complete Joystick Test");
+}
+
+void doChangeA1R()
+{
+  
+}
+
+void doChangeA1F()
+{
+  
 }
 
 void doChangeA1()
@@ -202,6 +214,13 @@ void loop() {
     }
   }
 
+  //special case of switches, duplicate negated state
+  Joystick.button(29, !allButtons[24]);
+  Joystick.button(30, !allButtons[25]);
+  Joystick.button(31, !allButtons[26]);
+  Joystick.button(32, !allButtons[27]);
+
+ 
   for (int i = 0; i < numEncoders * 2; i++)
   {
     if (i != ledPin) {
