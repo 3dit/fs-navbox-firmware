@@ -2,6 +2,7 @@
 #include <avr/pgmspace.h>
 #include <avr/interrupt.h>
 
+
 // Configure the number of buttons.  Be careful not
 // to use a pin for both a digital button and analog
 // axis.  The pullup resistor will interfere with
@@ -10,8 +11,13 @@ const int numButtons = 28;  // 16 for Teensy, 32 for Teensy++
 const int numEncoders = 5;
 const int buttonInputStart = 10; //11th pin (pin 10)
 const int pushButtonCount = numButtons - buttonInputStart;
-byte A1Input = 0;
-byte A2Input = 1;
+
+//TURNS OUT YOU CAN'T USE PIN 0 BECAUSE OF SERIAL MONITOR THERE!
+//SO HERE WE ARE BARROWING THE B INPUT FOR ENCODER A (MEANING ENCODER A IS NOT BEING USED)
+//JUST SO WE CAN TEST THIS
+byte A1Input = 2;
+byte A2Input = 3;
+
 byte B1Input = 2;
 byte B2Input = 3;
 byte C1Input = 4;
@@ -103,11 +109,11 @@ int CRotateResetDelay = 20;
 int DRotateResetDelay = globalRotateDelay;
 int ERotateResetDelay = 20;
 unsigned long ALastTickTime = 0;
-const int AMinimumMsForExtendedMove = 50;
-int AExtendedMoveMs = 300;
+const int AMinimumMsForExtendedMove = 70;
+int AExtendedMoveMs = 20;
 
 void setup() {
-  Serial.begin(9600);
+  //Serial.begin(9600);
   // configure the joystick to manual send mode.  This gives precise
   // control over when the computer receives updates, but it does
   // require you to manually call Joystick.send_now().
@@ -127,8 +133,8 @@ void setup() {
   //}
 
   //rotary encoder A
-  pinMode(A1Input, INPUT_PULLUP);
-  pinMode(A2Input, INPUT_PULLUP);
+  pinMode(A1Input, INPUT);
+  pinMode(A2Input, INPUT);
   //rotary encoder B
   pinMode(B1Input, INPUT_PULLUP);
   pinMode(B2Input, INPUT_PULLUP);
@@ -143,23 +149,50 @@ void setup() {
   pinMode(E2Input, INPUT_PULLUP);
 
 
-  //attachInterrupt(digitalPinToInterrupt(A1Input), doChangeA1, RISING);
-  //attachInterrupt(digitalPinToInterrupt(A2Input), doChangeA2, RISING);
+  //attachInterrupt(digitalPinToInterrupt(A1Input), doChangeA1R, RISING);
+  //attachInterrupt(digitalPinToInterrupt(A2Input), doChangeA2F, FALLING);
   //attachInterrupt(digitalPinToInterrupt(A1Input), doChangeA1R, RISING);
   //attachInterrupt(digitalPinToInterrupt(A1Input), doChangeA1F, FALLING);
+  
+  //attachInterrupt(digitalPinToInterrupt(A1Input), doAChanged, RISING);
+  //attachInterrupt(digitalPinToInterrupt(A2Input), doAChanged, FALLING);
+  //attachInterrupt(digitalPinToInterrupt(A1Input), doAChanged, RISING);
+  //attachInterrupt(digitalPinToInterrupt(A2Input), doAChanged, FALLING);
+
 
   Serial.println("Begin Complete Joystick Test");
+}
+int stepsACurrent = 0;
+bool stateAOn = false;
+volatile bool AHasChanged = false;
+void doAChanged()
+{
+  AHasChanged = true;
 }
 
 void doChangeA1R()
 {
-  
+  if(A1State == 0)
+  {
+    VA1State = 1;
+  }
 }
 
 void doChangeA1F()
 {
   
 }
+
+void doChangeA2R()
+{
+  
+}
+
+void doChangeA2F()
+{
+  
+}
+
 
 void doChangeA1()
 {
@@ -179,10 +212,10 @@ int angle = 0;
 void loop() {
 
   encoderA();
-  encoderB();
-  encoderC();
-  encoderD();
-  encoderE();
+  //encoderB();
+  //encoderC();
+  //encoderD();
+  //encoderE();
 
   // read 6 analog inputs and use them for the joystick axis
   //Joystick.X(analogRead(0));
@@ -192,7 +225,7 @@ void loop() {
   //Joystick.sliderLeft(analogRead(4));
   //Joystick.sliderRight(analogRead(5));
 
-
+if(true) {
   // read digital 'button' pins
   for (int i = buttonInputStart; i < numButtons; i++) {
 
@@ -213,6 +246,7 @@ void loop() {
       Joystick.button(i + 1, allButtons[i]);
     }
   }
+}
 
   //special case of switches, duplicate negated state
   Joystick.button(29, !allButtons[24]);
@@ -228,27 +262,6 @@ void loop() {
     }
   }
 
-  //map encoder values through
-  //for(int i = 0;i<numEncoders*2;i++)
-  //{
-  //  if(digitalRead(i))
-  //  {
-  //    allButtons[i] = 0;
-  //  } else {
-  //    allButtons[i] = 1;
-  //  }
-  //  Joystick.button(i + 1, allButtons[i]);
-  //}
-
-
-
-
-
-
-
-  //Joystick.button(i, allButtons[i]);
-
-
   Joystick.send_now();
 
   boolean anyChange = false;
@@ -262,33 +275,29 @@ void loop() {
     anyChange = true;
   }
 
-  //if (anyChange) {
-  //  Serial.print("Buttons: ");
-  //  for (int i=0; i<numButtons; i++) {
-  //    Serial.print(allButtons[i], DEC);
-  //  }
-  //  Serial.println();
-  //}
-
   delay(1);
 }
 
 void encoderA() {
   // read the input pin:
-  cli();
+  bool hasChanged = false;
+  //cli();
+  hasChanged = AHasChanged;
+  AHasChanged = false;
   //A1State = VA1State; //digitalRead(A1Input);
   //A2State = VA2State; //digitalRead(A2Input) << 1;
-  sei();
-  A1State = digitalRead(A1Input);
-  A2State = digitalRead(A2Input) << 1;
+  //sei();
 
-  AState = A1State | A2State;
+  if(hasChanged || true) {
+    A1State = digitalRead(A1Input);
+    //A1State = PIND & (1<<2) > 0 ? 1 : 0;
+    A2State = digitalRead(A2Input) << 1;
+    //A2State = (PIND & (1<<3) > 0 ? 1 : 0) << 1;
+    AState = A1State | A2State;
+  }
 
   bool isExtendedMove = false;
   int currentRotateResetDelay = ARotateResetDelay;
-
-  //AMinimumMsForExtendedMove = 50;
-  //AExtendedMoveMs = 200;
 
   if (lastStateA != AState) {
 
@@ -304,7 +313,7 @@ void encoderA() {
         currentRotateResetDelay = AExtendedMoveMs;
       }
     }
-    ALastTickTime = millis();
+    ALastTickTime = nowms;
 
 
     switch (AState) {
@@ -368,32 +377,12 @@ void encoderA() {
   }
 
   lastStateA = AState;
-  //Serial.print(AState);
-  //Serial.print("\t");
-  //Serial.print(cwA);
-  //Serial.print("\t");
-  //Serial.println(stepsA);
 
-
-  if (ADialMoveRight == true)
-  {
-    allButtons[ARotateRightButton] = 1;
-    ADialMoveRight = false;
-    ADialMoveLeft = false;
-    ARightFalseCount = currentRotateResetDelay;
-  } else {
-    if (ARightFalseCount != -1) {
-      ARightFalseCount--;
-    }
-    if (ARightFalseCount <= 0) {
-      allButtons[ARotateRightButton] = 0;
-    }
-  }
   if (ADialMoveLeft == true)
   {
     allButtons[ARotateLeftButton] = 1;
     ADialMoveLeft = false;
-    ADialMoveRight = false;
+    //ADialMoveRight = false;
     ALeftFalseCount = currentRotateResetDelay;
   } else {
     if (ALeftFalseCount != -1) {
@@ -401,6 +390,21 @@ void encoderA() {
     }
     if (ALeftFalseCount <= 0) {
       allButtons[ARotateLeftButton] = 0;
+    }
+  }
+
+  if (ADialMoveRight == true)
+  {
+    allButtons[ARotateRightButton] = 1;
+    ADialMoveRight = false;
+    //ADialMoveLeft = false;
+    ARightFalseCount = currentRotateResetDelay;
+  } else {
+    if (ARightFalseCount != -1) {
+      ARightFalseCount--;
+    }
+    if (ARightFalseCount <= 0) {
+      allButtons[ARotateRightButton] = 0;
     }
   }
 
