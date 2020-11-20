@@ -1,6 +1,13 @@
+
+//#define ENCODER_OPTIMIZE_INTERRUPTS
+//#include <Encoder.h>
+
 #include <avr/io.h>
 #include <avr/pgmspace.h>
 #include <avr/interrupt.h>
+
+
+//Encoder enc(2,3);
 
 // Configure the number of buttons.  Be careful not
 // to use a pin for both a digital button and analog
@@ -10,8 +17,8 @@ const int numButtons = 28;  // 16 for Teensy, 32 for Teensy++
 const int numEncoders = 5;
 const int buttonInputStart = 10; //11th pin (pin 10)
 const int pushButtonCount = numButtons - buttonInputStart;
-byte A1Input = 0;
-byte A2Input = 1;
+byte A1Input = 2;
+byte A2Input = 3;
 byte B1Input = 2;
 byte B2Input = 3;
 byte C1Input = 4;
@@ -113,7 +120,7 @@ void setup() {
   // require you to manually call Joystick.send_now().
   Joystick.useManualSend(true);
   for (int i = 0; i < numButtons; i++) {
-    pinMode(i, INPUT_PULLUP);
+    if(i!=2 && i!=3) pinMode(i, INPUT_PULLUP);
   }
 
   //ISR(PCINT0_vect)
@@ -143,32 +150,72 @@ void setup() {
   pinMode(E2Input, INPUT_PULLUP);
 
 
-  //attachInterrupt(digitalPinToInterrupt(A1Input), doChangeA1, RISING);
-  //attachInterrupt(digitalPinToInterrupt(A2Input), doChangeA2, RISING);
-  //attachInterrupt(digitalPinToInterrupt(A1Input), doChangeA1R, RISING);
-  //attachInterrupt(digitalPinToInterrupt(A1Input), doChangeA1F, FALLING);
-
-  Serial.println("Begin Complete Joystick Test");
-}
-
-void doChangeA1R()
-{
+  //attachInterrupt(digitalPinToInterrupt(B1Input), doChangeB1, CHANGE);
+  //attachInterrupt(digitalPinToInterrupt(B2Input), doChangeB2, CHANGE);
   
+  attachInterrupt(digitalPinToInterrupt(B1Input), doChangeB1, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(B2Input), doChangeB2, CHANGE);
+
+  //enc.write(5);
 }
 
-void doChangeA1F()
+volatile bool MoveLeft = false;
+volatile bool MoveRight = false;
+volatile byte newState1;
+volatile byte newState2;
+
+void doChangeB1()
 {
-  
+  cli();
+  newState1 = digitalRead(B1Input);
+  if(VA1State == 0 && VA2State == 0 && newState1==1)
+  {
+    MoveRight = true;
+    MoveLeft = false;
+  } 
+  else if(VA1State == 1 && VA2State == 1 && newState1 == 0)
+  {
+    MoveRight = true;
+    MoveLeft = false;
+  } 
+  else if(VA1State == 0 && VA2State == 1 && newState1 == 1)
+  {
+      MoveLeft = true;
+      MoveRight = false;
+  } 
+  else if (VA1State == 1 && VA2State == 0 && newState1 == 0)
+  {
+    MoveLeft = true;
+    MoveRight = false;
+  }
+  VA1State = newState1;
+  sei();
 }
 
-void doChangeA1()
+void doChangeB2()
 {
-  VA1State = digitalRead(A1Input);
-}
-
-void doChangeA2()
-{
-  VA2State = digitalRead(A2Input) << 1;
+  cli();
+  newState2 = digitalRead(B2Input);
+  if(VA1State == 1 && VA2State == 0 && newState2 == 1)
+  {
+    MoveRight = true;
+    MoveLeft = false;
+  } 
+  else if(VA1State == 0 && VA2State == 1 && newState2 == 0)
+  {
+    MoveRight = true;
+    MoveLeft = false;
+  } else if(VA1State == 0 && VA2State == 0 && newState2 == 1)
+  {
+    MoveLeft = true;
+    MoveRight = false;
+  } else if(VA1State == 1 && VA2State == 1 && newState2 == 0)
+  {
+    MoveLeft = true;
+    MoveRight = false;
+  }
+  VA2State = newState2;
+  sei();
 }
 
 
@@ -176,39 +223,79 @@ byte allButtons[numButtons];
 byte prevButtons[numButtons];
 int angle = 0;
 
+long atSeq = 5;
+int rightIsOn = 0;
+int leftIsOn = 0;
+int wait = 2;
+
 void loop() {
 
-  encoderA();
-  encoderB();
-  encoderC();
-  encoderD();
-  encoderE();
+  //encoderA();
+  //encoderB();
+  //encoderC();
+  //encoderD();
+  //encoderE();
 
-  // read 6 analog inputs and use them for the joystick axis
-  //Joystick.X(analogRead(0));
-  //Joystick.Y(analogRead(1));
-  //Joystick.Z(analogRead(2));
-  //Joystick.Zrotate(analogRead(3));
-  //Joystick.sliderLeft(analogRead(4));
-  //Joystick.sliderRight(analogRead(5));
+  A1State = VA1State;
+  A2State = VA2State;
 
+  //allButtons[ARotateLeftButton] = A1State;
+  //allButtons[ARotateRightButton] = A2State;
 
+  cli();
+  bool MoveItLeft = MoveLeft;
+  bool MoveItRight = MoveRight;
+  MoveLeft = false;
+  MoveRight = false;
+  sei();
+  allButtons[ARotateLeftButton] = MoveItLeft;
+  allButtons[ARotateRightButton] = MoveItRight;
+
+//  long pos = enc.read();
+//  if(wait--<0)
+//  {
+//    wait = 2;
+//    //pos++;  
+//  }
+//  
+//  if(pos != atSeq) digitalWrite(13,1);
+//  
+//  if(pos > atSeq)
+//  {
+//    if(rightIsOn == 0)
+//    {
+//      rightIsOn = 1;
+//      allButtons[ARotateRightButton] = 1;
+//      pos++;
+//    } else {
+//      rightIsOn = 0;
+//      allButtons[ARotateRightButton] = 0;
+//    }
+//  } else if(pos < atSeq) {
+//    if(leftIsOn == 0)
+//    {
+//      leftIsOn = 1;
+//      allButtons[ARotateLeftButton] = 1;
+//      pos--;
+//    } else {
+//      leftIsOn = 0;
+//      allButtons[ARotateLeftButton] = 1;
+//    }
+//  } else {
+//    leftIsOn = false;
+//    rightIsOn = false;
+//    allButtons[ARotateRightButton] = 0;
+//    allButtons[ARotateLeftButton] = 0;
+//  }
+
+if(false) {
   // read digital 'button' pins
   for (int i = buttonInputStart; i < numButtons; i++) {
-
-    //if(i != ARotateRightButton && i != ARotateLeftButton) {
-    //  if (digitalRead(i)) {
-    //    allButtons[i] = 0;
-    //  } else {
-    //    allButtons[i] = 1;//low is button on (pullup resistor is applied)
-    //  }
-
     if (digitalRead(i)) {
       allButtons[i] = 0;
     } else {
       allButtons[i] = 1;
     }
-
     if (i != ledPin) {
       Joystick.button(i + 1, allButtons[i]);
     }
@@ -219,7 +306,7 @@ void loop() {
   Joystick.button(30, !allButtons[25]);
   Joystick.button(31, !allButtons[26]);
   Joystick.button(32, !allButtons[27]);
-
+}
  
   for (int i = 0; i < numEncoders * 2; i++)
   {
@@ -228,27 +315,6 @@ void loop() {
     }
   }
 
-  //map encoder values through
-  //for(int i = 0;i<numEncoders*2;i++)
-  //{
-  //  if(digitalRead(i))
-  //  {
-  //    allButtons[i] = 0;
-  //  } else {
-  //    allButtons[i] = 1;
-  //  }
-  //  Joystick.button(i + 1, allButtons[i]);
-  //}
-
-
-
-
-
-
-
-  //Joystick.button(i, allButtons[i]);
-
-
   Joystick.send_now();
 
   boolean anyChange = false;
@@ -256,21 +322,11 @@ void loop() {
     if (allButtons[i] != prevButtons[i]) anyChange = true;
     prevButtons[i] = allButtons[i];
   }
+  
 
-  if (ADialMoveRight || ADialMoveLeft)
-  {
-    anyChange = true;
-  }
 
-  //if (anyChange) {
-  //  Serial.print("Buttons: ");
-  //  for (int i=0; i<numButtons; i++) {
-  //    Serial.print(allButtons[i], DEC);
-  //  }
-  //  Serial.println();
-  //}
 
-  delay(1);
+  delay(10);
 }
 
 void encoderA() {
