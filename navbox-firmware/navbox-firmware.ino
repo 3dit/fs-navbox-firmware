@@ -163,59 +163,85 @@ volatile bool MoveLeft = false;
 volatile bool MoveRight = false;
 volatile byte newState1;
 volatile byte newState2;
+volatile long turnSeq = 0;
+long turnSeqActive = 0;
 
 void doChangeB1()
 {
-  cli();
-  newState1 = digitalRead(B1Input);
+  //nsigned char sreg_backup;
+  //sreg_backup = SREG;   /* save interrupt enable/disable state */
+  
+  //cli();
+  newState1 = ((PIND & 0x4) >> 2) ? 1 : 0;
+  VA2State = ((PIND & 0x8) >> 3) ? 1 : 0;
+  
   if(VA1State == 0 && VA2State == 0 && newState1==1)
   {
     MoveRight = true;
     MoveLeft = false;
+    turnSeq++;
   } 
   else if(VA1State == 1 && VA2State == 1 && newState1 == 0)
   {
     MoveRight = true;
     MoveLeft = false;
+    turnSeq++;
   } 
   else if(VA1State == 0 && VA2State == 1 && newState1 == 1)
   {
       MoveLeft = true;
       MoveRight = false;
+      turnSeq--;
   } 
   else if (VA1State == 1 && VA2State == 0 && newState1 == 0)
   {
     MoveLeft = true;
     MoveRight = false;
+    turnSeq--;
   }
   VA1State = newState1;
-  sei();
+
+  //sei();
 }
 
 void doChangeB2()
 {
-  cli();
-  newState2 = digitalRead(B2Input);
+  //unsigned char sreg_backup;
+
+  //sreg_backup = SREG;   /* save interrupt enable/disable state */
+  
+  //cli();
+  //newState2 = digitalRead(B2Input);
+  newState2 = ((PIND & 0x8) >> 3) ? 1 : 0;
+  VA1State = ((PIND & 0x4) >> 2) ? 1 : 0;
+  
   if(VA1State == 1 && VA2State == 0 && newState2 == 1)
   {
     MoveRight = true;
     MoveLeft = false;
+    turnSeq++;
   } 
   else if(VA1State == 0 && VA2State == 1 && newState2 == 0)
   {
     MoveRight = true;
     MoveLeft = false;
-  } else if(VA1State == 0 && VA2State == 0 && newState2 == 1)
+    turnSeq++;
+  } 
+  else if(VA1State == 0 && VA2State == 0 && newState2 == 1)
   {
     MoveLeft = true;
     MoveRight = false;
-  } else if(VA1State == 1 && VA2State == 1 && newState2 == 0)
+    turnSeq--;
+  } 
+  else if(VA1State == 1 && VA2State == 1 && newState2 == 0)
   {
     MoveLeft = true;
     MoveRight = false;
+    turnSeq--;
   }
   VA2State = newState2;
-  sei();
+  
+  //sei();
 }
 
 
@@ -242,71 +268,77 @@ void loop() {
   //allButtons[ARotateLeftButton] = A1State;
   //allButtons[ARotateRightButton] = A2State;
 
+  bool needUpdate = false;
+
+  
   cli();
   bool MoveItLeft = MoveLeft;
   bool MoveItRight = MoveRight;
+  long theTurnSeq = turnSeq;
   MoveLeft = false;
   MoveRight = false;
   sei();
-  allButtons[ARotateLeftButton] = MoveItLeft;
-  allButtons[ARotateRightButton] = MoveItRight;
-
-//  long pos = enc.read();
-//  if(wait--<0)
-//  {
-//    wait = 2;
-//    //pos++;  
-//  }
-//  
-//  if(pos != atSeq) digitalWrite(13,1);
-//  
-//  if(pos > atSeq)
-//  {
-//    if(rightIsOn == 0)
-//    {
-//      rightIsOn = 1;
-//      allButtons[ARotateRightButton] = 1;
-//      pos++;
-//    } else {
-//      rightIsOn = 0;
-//      allButtons[ARotateRightButton] = 0;
-//    }
-//  } else if(pos < atSeq) {
-//    if(leftIsOn == 0)
-//    {
-//      leftIsOn = 1;
-//      allButtons[ARotateLeftButton] = 1;
-//      pos--;
-//    } else {
-//      leftIsOn = 0;
-//      allButtons[ARotateLeftButton] = 1;
-//    }
-//  } else {
-//    leftIsOn = false;
-//    rightIsOn = false;
-//    allButtons[ARotateRightButton] = 0;
-//    allButtons[ARotateLeftButton] = 0;
-//  }
-
-if(false) {
-  // read digital 'button' pins
-  for (int i = buttonInputStart; i < numButtons; i++) {
-    if (digitalRead(i)) {
-      allButtons[i] = 0;
-    } else {
-      allButtons[i] = 1;
+  //allButtons[ARotateLeftButton] = MoveItLeft;
+  //allButtons[ARotateRightButton] = MoveItRight;
+  
+  if(allButtons[ARotateLeftButton] == 1 || allButtons[ARotateRightButton] == 1)
+  {
+    allButtons[ARotateLeftButton] = 0;
+    allButtons[ARotateRightButton] = 0;
+    digitalWrite(ledPin,0);
+    needUpdate = true;    
+  } else {
+    if(turnSeqActive < turnSeq)
+    {
+      long delta = turnSeq - turnSeqActive;
+      if(delta>3)
+      {
+        turnSeq = turnSeqActive + 3;
+      }
+      turnSeqActive++;
+      allButtons[ARotateRightButton] = 1;
+      digitalWrite(ledPin,1);
+      allButtons[ARotateLeftButton] = 0;
+      needUpdate = true;
     }
-    if (i != ledPin) {
-      Joystick.button(i + 1, allButtons[i]);
+    else if(turnSeqActive > turnSeq)
+    {
+      long delta = turnSeqActive - turnSeq;
+      if(delta>3)
+      {
+        turnSeq = turnSeqActive - 3;
+      }
+      turnSeqActive--;
+      allButtons[ARotateLeftButton] = 1;
+      allButtons[ARotateRightButton] = 0;
+      digitalWrite(ledPin,0);
+      needUpdate = true;
+    }
+    else
+    {
+      digitalWrite(ledPin,0);
     }
   }
 
-  //special case of switches, duplicate negated state
-  Joystick.button(29, !allButtons[24]);
-  Joystick.button(30, !allButtons[25]);
-  Joystick.button(31, !allButtons[26]);
-  Joystick.button(32, !allButtons[27]);
-}
+//if(false) {
+//  // read digital 'button' pins
+//  for (int i = buttonInputStart; i < numButtons; i++) {
+//    if (digitalRead(i)) {
+//      allButtons[i] = 0;
+//    } else {
+//      allButtons[i] = 1;
+//    }
+//    if (i != ledPin) {
+//      Joystick.button(i + 1, allButtons[i]);
+//    }
+//  }
+//
+//  //special case of switches, duplicate negated state
+//  Joystick.button(29, !allButtons[24]);
+//  Joystick.button(30, !allButtons[25]);
+//  Joystick.button(31, !allButtons[26]);
+//  Joystick.button(32, !allButtons[27]);
+//}
  
   for (int i = 0; i < numEncoders * 2; i++)
   {
@@ -315,18 +347,15 @@ if(false) {
     }
   }
 
-  Joystick.send_now();
+  if(needUpdate) Joystick.send_now();
 
-  boolean anyChange = false;
-  for (int i = 0; i < numButtons; i++) {
-    if (allButtons[i] != prevButtons[i]) anyChange = true;
-    prevButtons[i] = allButtons[i];
-  }
-  
+//  boolean anyChange = false;
+//  for (int i = 0; i < numButtons; i++) {
+//    if (allButtons[i] != prevButtons[i]) anyChange = true;
+//    prevButtons[i] = allButtons[i];
+//  }
 
-
-
-  delay(10);
+  delay(50);
 }
 
 void encoderA() {
