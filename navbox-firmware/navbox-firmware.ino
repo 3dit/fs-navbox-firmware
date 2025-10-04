@@ -14,8 +14,8 @@ byte A1Input = 0;
 byte A2Input = 1;
 byte B1Input = 2;
 byte B2Input = 3;
-byte C1Input = 4;
-byte C2Input = 5;
+byte C1Input = 5;
+byte C2Input = 4;
 byte D1Input = 6;
 byte D2Input = 7;
 byte E1Input = 8;
@@ -79,8 +79,8 @@ int ARotateRightButton = 1;
 int ARotateLeftButton = 0;
 int BRotateRightButton = 3;
 int BRotateLeftButton = 2;
-int CRotateLeftButton = 4;
-int CRotateRightButton = 5;
+int CRotateLeftButton = 5;
+int CRotateRightButton = 4;
 int DRotateLeftButton = 6;
 int DRotateRightButton = 7;
 int ERotateLeftButton = 8;
@@ -98,13 +98,19 @@ int ELeftFalseCount = -1;
 
 const int globalRotateDelay = 80;
 int ARotateResetDelay = 15;
-int BRotateResetDelay = globalRotateDelay;
-int CRotateResetDelay = 20;
+int BRotateResetDelay = 15;
+int CRotateResetDelay = 15;
 int DRotateResetDelay = globalRotateDelay;
 int ERotateResetDelay = 20;
 unsigned long ALastTickTime = 0;
+unsigned long BLastTickTime = 0;
+unsigned long CLastTickTime = 0;
 const int AMinimumMsForExtendedMove = 50;
+const int BMinimumMsForExtendedMove = 50;
+const int CMinimumMsForExtendedMove = 50;
 int AExtendedMoveMs = 300;
+int BExtendedMoveMs = 300;
+int CExtendedMoveMs = 300;
 
 void setup() {
   Serial.begin(9600);
@@ -407,17 +413,38 @@ void encoderA() {
 }
 
 void encoderB() {
-  // read the input pin:
-  //cli();
-  //B1State = VB1State; //digitalRead(A1Input);
-  //B2State = VB2State; //digitalRead(A2Input) << 1;
-  //sei();
+  cli();
+  //B1State = VA1State; //digitalRead(B1Input);
+  //B2State = VA2State; //digitalRead(B2Input) << 1;
+  sei();
   B1State = digitalRead(B1Input);
   B2State = digitalRead(B2Input) << 1;
 
   BState = B1State | B2State;
 
+  bool isExtendedMove = false;
+  int currentRotateResetDelay = BRotateResetDelay;
+
+  //BMinimumMsForExtendedMove = 50;
+  //BExtendedMoveMs = 200;
+
   if (lastStateB != BState) {
+
+    //state has changed, is it close enough to last time that we have to extend 'on' time?
+    unsigned int nowms = millis();
+    if (BLastTickTime > nowms)
+    {
+      //millis reset to start (once every 50 days)
+    } else {
+      if ((nowms - BLastTickTime) < BMinimumMsForExtendedMove)
+      {
+        isExtendedMove = true;
+        currentRotateResetDelay = BExtendedMoveMs;
+      }
+    }
+    BLastTickTime = millis();
+
+
     switch (BState) {
       case 0:
         if (lastStateB == 2) {
@@ -429,7 +456,7 @@ void encoderB() {
         else if (lastStateB == 1) {
           stepsB--;
           cwB = -1;
-          //BDialMoveRight = false;
+          //ADialMoveRight = false;
           BDialMoveLeft = true;
         }
         break;
@@ -479,6 +506,11 @@ void encoderB() {
   }
 
   lastStateB = BState;
+  //Serial.print(BState);
+  //Serial.print("\t");
+  //Serial.print(cwB);
+  //Serial.print("\t");
+  //Serial.println(stepsB);
 
 
   if (BDialMoveRight == true)
@@ -486,7 +518,7 @@ void encoderB() {
     allButtons[BRotateRightButton] = 1;
     BDialMoveRight = false;
     BDialMoveLeft = false;
-    BRightFalseCount = BRotateResetDelay;
+    BRightFalseCount = currentRotateResetDelay;
   } else {
     if (BRightFalseCount != -1) {
       BRightFalseCount--;
@@ -500,7 +532,7 @@ void encoderB() {
     allButtons[BRotateLeftButton] = 1;
     BDialMoveLeft = false;
     BDialMoveRight = false;
-    BLeftFalseCount = BRotateResetDelay;
+    BLeftFalseCount = currentRotateResetDelay;
   } else {
     if (BLeftFalseCount != -1) {
       BLeftFalseCount--;
@@ -512,17 +544,38 @@ void encoderB() {
 }
 
 void encoderC() {
-  // read the input pin:
-  //cli();
-  //C1State = VC1State; //digitalRead(C1Input);
-  //B2State = VC2State; //digitalRead(C2Input) << 1;
-  //sei();
+  cli();
+  //C1State = VA1State; //digitalRead(C1Input);
+  //C2State = VA2State; //digitalRead(C2Input) << 1;
+  sei();
   C1State = digitalRead(C1Input);
   C2State = digitalRead(C2Input) << 1;
 
   CState = C1State | C2State;
 
+  bool isExtendedMove = false;
+  int currentRotateResetDelay = CRotateResetDelay;
+
+  //CMinimumMsForExtendedMove = 50;
+  //CExtendedMoveMs = 200;
+
   if (lastStateC != CState) {
+
+    //state has changed, is it close enough to last time that we have to extend 'on' time?
+    unsigned int nowms = millis();
+    if (CLastTickTime > nowms)
+    {
+      //millis reset to start (once every 50 days)
+    } else {
+      if ((nowms - CLastTickTime) < CMinimumMsForExtendedMove)
+      {
+        isExtendedMove = true;
+        currentRotateResetDelay = CExtendedMoveMs;
+      }
+    }
+    CLastTickTime = millis();
+
+
     switch (CState) {
       case 0:
         if (lastStateC == 2) {
@@ -584,6 +637,11 @@ void encoderC() {
   }
 
   lastStateC = CState;
+  //Serial.print(CState);
+  //Serial.print("\t");
+  //Serial.print(cwB);
+  //Serial.print("\t");
+  //Serial.println(stepsC);
 
 
   if (CDialMoveRight == true)
@@ -591,7 +649,7 @@ void encoderC() {
     allButtons[CRotateRightButton] = 1;
     CDialMoveRight = false;
     CDialMoveLeft = false;
-    CRightFalseCount = CRotateResetDelay;
+    CRightFalseCount = currentRotateResetDelay;
   } else {
     if (CRightFalseCount != -1) {
       CRightFalseCount--;
@@ -605,7 +663,7 @@ void encoderC() {
     allButtons[CRotateLeftButton] = 1;
     CDialMoveLeft = false;
     CDialMoveRight = false;
-    CLeftFalseCount = CRotateResetDelay;
+    CLeftFalseCount = currentRotateResetDelay;
   } else {
     if (CLeftFalseCount != -1) {
       CLeftFalseCount--;
